@@ -1,0 +1,2 @@
+SN-12345 , cloude-id-001
+SN-67689 , ['cloude-id-002']
