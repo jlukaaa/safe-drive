@@ -18,8 +18,12 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+  // #include "\hw\touch_hw.h"
 #include "hw/touch_hw.h"
 #include "hw/uart_hw.h"
+#include "stdio.h"
+#include "hw/imu_hw.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -41,6 +45,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+I2C_HandleTypeDef hi2c1;
+
 UART_HandleTypeDef huart3;
 
 PCD_HandleTypeDef hpcd_USB_OTG_FS;
@@ -56,6 +62,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART3_UART_Init(void);
 static void MX_USB_OTG_FS_PCD_Init(void);
+static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -100,9 +107,44 @@ int main(void)
   MX_GPIO_Init();
   MX_USART3_UART_Init();
   MX_USB_OTG_FS_PCD_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-  touch_hw_init();
+  // touch_hw_init();
+  // uart_hw_init(&huart3);
+
   uart_hw_init(&huart3);
+  printf("Pocinje I2C sken... \r\n");
+  uint8_t found = 0;
+  for (uint8_t address = 0x08; address < 0x78; address++)
+  {
+      HAL_StatusTypeDef result = HAL_I2C_IsDeviceReady(&hi2c1, (address << 1), 3, 5);
+      if (result == HAL_OK)
+      {
+          printf("Uspjesno pronadjen uredjaj na adresi: 0x%02X\r\n", address);
+          found++;
+      }
+      else if (result == HAL_ERROR)
+      {
+          printf("Greska pri komunikaciji sa uredjajem na adresi: 0x%02X\r\n", address);
+      }
+  }
+
+  if (imu_hw_init())
+  {
+   if(imu_hw_alive())
+   {
+    float temp = 0.0f;
+    if(imu_hw_read_temp(&temp))
+    {
+        printf("Temperatura: %.2f °C\r\n", temp);
+    }
+    else
+    {
+        printf("Neuspjesno citanje temperature.\r\n");
+    }
+
+   }
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -194,18 +236,18 @@ int main(void)
         HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
     }*/
 
-    touch_hw_update();
+    // touch_hw_update();
 
-    if (touch_is_pressed() && touch_get_press_dur_mil() > 1000)
+    // if (touch_is_pressed() && touch_get_press_dur_mil() > 1000)
     
-        HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_SET);
+    //     HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_SET);
     
-    else
-    {
-         HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
-    }
+    // else
+    // {
+    //      HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
+    // }
 
-    uart_hw_update();
+    // uart_hw_update();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -257,6 +299,40 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief I2C1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C1_Init(void)
+{
+
+  /* USER CODE BEGIN I2C1_Init 0 */
+
+  /* USER CODE END I2C1_Init 0 */
+
+  /* USER CODE BEGIN I2C1_Init 1 */
+
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.ClockSpeed = 100000;
+  hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C1_Init 2 */
+
+  /* USER CODE END I2C1_Init 2 */
+
 }
 
 /**
@@ -391,7 +467,7 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-    touch_hw_on_exti(GPIO_Pin);
+  //touch_hw_on_exti(GPIO_Pin);
 }
 /* USER CODE END 4 */
 
