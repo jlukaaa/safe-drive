@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 import os
 
 class IotUredjaj:
+
     def __init__(self, sn: str, id_na_claudu : str):
         self.sn = sn
         self.id_na_cloudu = id_na_claudu
@@ -40,6 +41,7 @@ if __name__ == '__main__':
     os.environ["IOT_FILE_PATH"] = "uredjaji.txt"
 
     sn_test = "SN-12345"
+    
 
     if IotUredjaj.validiraj_sn(sn_test):
         print(f"Serijski broj {sn_test} je validan!")
