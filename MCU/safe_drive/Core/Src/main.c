@@ -18,12 +18,12 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-  // #include "\hw\touch_hw.h"
-#include "hw/touch_hw.h"
-#include "hw/uart_hw.h"
-#include "stdio.h"
-#include "hw/imu_hw.h"
-
+#include "hw/servo_hw.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include "hw/fan_hw.h"
+#include "hw/encoder_hw.h"
+#include <string.h>
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -45,7 +45,12 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+ADC_HandleTypeDef hadc1;
+
 I2C_HandleTypeDef hi2c1;
+
+TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim3;
 
 UART_HandleTypeDef huart3;
 
@@ -55,6 +60,10 @@ PCD_HandleTypeDef hpcd_USB_OTG_FS;
 uint8_t last_btn_state = GPIO_PIN_RESET;
 uint32_t last_debounce = 0;
 uint8_t rx_data = 0; 
+
+char cmd_buf[16];
+uint8_t cmd_idx = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -63,6 +72,9 @@ static void MX_GPIO_Init(void);
 static void MX_USART3_UART_Init(void);
 static void MX_USB_OTG_FS_PCD_Init(void);
 static void MX_I2C1_Init(void);
+static void MX_ADC1_Init(void);
+static void MX_TIM3_Init(void);
+static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -108,43 +120,55 @@ int main(void)
   MX_USART3_UART_Init();
   MX_USB_OTG_FS_PCD_Init();
   MX_I2C1_Init();
+  MX_ADC1_Init();
+  MX_TIM3_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
   // touch_hw_init();
   // uart_hw_init(&huart3);
 
-  uart_hw_init(&huart3);
-  printf("Pocinje I2C sken... \r\n");
-  uint8_t found = 0;
-  for (uint8_t address = 0x08; address < 0x78; address++)
-  {
-      HAL_StatusTypeDef result = HAL_I2C_IsDeviceReady(&hi2c1, (address << 1), 3, 5);
-      if (result == HAL_OK)
-      {
-          printf("Uspjesno pronadjen uredjaj na adresi: 0x%02X\r\n", address);
-          found++;
-      }
-      else if (result == HAL_ERROR)
-      {
-          printf("Greska pri komunikaciji sa uredjajem na adresi: 0x%02X\r\n", address);
-      }
-  }
+  //uart_hw_init(&huart3);
+  // printf("Pocinje I2C sken... \r\n");
+  // uint8_t found = 0;
+  // for (uint8_t address = 0x08; address < 0x78; address++)
+  // {
+  //     HAL_StatusTypeDef result = HAL_I2C_IsDeviceReady(&hi2c1, (address << 1), 3, 5);
+  //     if (result == HAL_OK)
+  //     {
+  //         printf("Uspjesno pronadjen uredjaj na adresi: 0x%02X\r\n", address);
+  //         found++;
+  //     }
+  //     else if (result == HAL_ERROR)
+  //     {
+  //         printf("Greska pri komunikaciji sa uredjajem na adresi: 0x%02X\r\n", address);
+  //     }
+  // }
 
-  if (imu_hw_init())
-  {
-   if(imu_hw_alive())
-   {
-    float temp = 0.0f;
-    if(imu_hw_read_temp(&temp))
-    {
-        printf("Temperatura: %.2f °C\r\n", temp);
-    }
-    else
-    {
-        printf("Neuspjesno citanje temperature.\r\n");
-    }
+  // if (imu_hw_init())
+  // {
+  //  imu_hw_alive();
+  // {
+  //   float temp = 0.0f;
+  //   if(imu_hw_read_temp(&temp))
+  //   {
+  //       printf("Temperatura: %.2f °C\r\n", temp);
+  //   }
+  //   else
+  //   {
+  //       printf("Neuspjesno citanje temperature.\r\n");
+  //   }
 
-   }
-  }
+  //  }
+  //imu_hw_config_ranges();
+  //distance_hw_init();
+  //}
+  servo_hw_init();
+  fan_hw_init();
+    printf("\r\n========================================\r\n");
+    printf("  TEST SISTEMA SPREMAN!\r\n");
+    printf("  - Za ventilator: ukucaj '1' (ili 'fan on') / '0' (ili 'fan off')\r\n");
+    printf("  - Za servo: ukucaj broj izmedju -100 i 100\r\n");
+    printf("========================================\r\n");  
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -181,19 +205,41 @@ int main(void)
           break;
       }
     }
+    */
 
-    uint32_t current_tick = HAL_GetTick();
-    uint8_t btn_state = HAL_GPIO_ReadPin(USER_Btn_GPIO_Port, USER_Btn_Pin);
+    // CITANJE TEMPERATURE I ISPISIVANJE NA TERMINAL NA PRITISAK DUGMETA
+    // uint32_t current_tick = HAL_GetTick();
+    // uint8_t btn_state = HAL_GPIO_ReadPin(USER_Btn_GPIO_Port, USER_Btn_Pin);
 
-    if (btn_state == GPIO_PIN_SET && last_btn_state == GPIO_PIN_RESET)
-    {
-        if (current_tick - last_debounce > 50)
-        {
-            printf("Bez budala tupoga pogleda,Bil umovi mogli blistat svijetli!?\r\n");
-            last_debounce = current_tick;
-        }
-    }
-    last_btn_state = btn_state;
+    // if (btn_state == GPIO_PIN_SET && last_btn_state == GPIO_PIN_RESET)
+    // {
+    //     if (current_tick - last_debounce > 50)
+    //     {
+    //         float temp = 0.0f;
+    //         if (imu_hw_read_temp(&temp))
+    //         {
+    //            printf("Temperatura je : %.2f C\r\n", temp);
+    //         }
+    //         else
+    //         {
+    //             printf("Neuspjesno citanje temperature!\r\n");
+
+    //         }
+    //          float ax, ay, az;
+    //         if (imu_hw_read_accel_g(&ax, &ay, &az))
+    //         {
+    //             printf("Accel: X=%.3f g, Y=%.3f g, Z=%.3f g\r\n", ax, ay, az);
+    //         }
+
+    //         float gx, gy, gz;
+    //         if (imu_hw_read_gyro_dps(&gx, &gy, &gz))
+    //         {
+    //             printf("Gyro: X=%.2f deg/s, Y=%.2f deg/s, Z=%.2f deg/s\r\n", gx, gy, gz);
+    //         }
+    //             last_debounce = current_tick;
+    //         }
+    // }
+    // last_btn_state = btn_state;
 
     /*if( HAL_GetTick() - prevtick1 >= period1)
     {
@@ -248,11 +294,68 @@ int main(void)
     // }
 
     // uart_hw_update();
+    /*
+*/
+    //CITANJE UDALJENOSTI
+    // static uint32_t last_distance_read = 0;
+    // if (HAL_GetTick() - last_distance_read >= 500)
+    // {
+    //     last_distance_read = HAL_GetTick();
+    //     float distance = 0.0f;
+    //     if (distance_hw_read_cm(&distance))
+    //     {
+    //         printf("Udaljenost: %.2f cm\r\n", distance);
+    //     }
+    // }
+   // KALIBRACIJA SENZORA
+//    float v = 0.0f;
+// if (distance_hw_read_voltage_debug(&v))
+// {
+//     printf("Napon: %.3f V\r\n", v);
+// }
+    while (1)
+    {
+        if (HAL_UART_Receive(&huart3, &rx_data, 1, 0) == HAL_OK)
+        {
+            if (rx_data == '\r' || rx_data == '\n')
+            {
+                if (cmd_idx > 0)
+                {
+                    cmd_buf[cmd_idx] = '\0'; // Zavrsi string
+
+                    // 1. Provjera komandi za ventilator
+                    if (strcmp(cmd_buf, "1") == 0 || strcmp(cmd_buf, "fan on") == 0)
+                    {
+                        fan_hw_set(true);
+                        printf("Ventilator: UPALJEN (PE10 -> HIGH)\r\n");
+                    }
+                    else if (strcmp(cmd_buf, "0") == 0 || strcmp(cmd_buf, "fan off") == 0)
+                    {
+                        fan_hw_set(false);
+                        printf("Ventilator: UGASEN (PE10 -> LOW)\r\n");
+                    }
+                    // 2. Ako nije ventilator, obradi kao brzinu serva
+                    else
+                    {
+                        int speed = atoi(cmd_buf);
+                        servo_hw_set_speed((int8_t)speed);
+                        printf("Servo brzina postavljena na: %d\r\n", speed);
+                    }
+
+                    cmd_idx = 0; // Resetuj bafer za sljedecu komandu
+                }
+            }
+            else if (cmd_idx < sizeof(cmd_buf) - 1)
+            {
+                cmd_buf[cmd_idx++] = rx_data;
+            }
+        }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
+}
 }
 
 /**
@@ -302,6 +405,58 @@ void SystemClock_Config(void)
 }
 
 /**
+  * @brief ADC1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC1_Init(void)
+{
+
+  /* USER CODE BEGIN ADC1_Init 0 */
+
+  /* USER CODE END ADC1_Init 0 */
+
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC1_Init 1 */
+
+  /* USER CODE END ADC1_Init 1 */
+
+  /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
+  */
+  hadc1.Instance = ADC1;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+  hadc1.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc1.Init.ScanConvMode = DISABLE;
+  hadc1.Init.ContinuousConvMode = DISABLE;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.DMAContinuousRequests = DISABLE;
+  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  if (HAL_ADC_Init(&hadc1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
+  */
+  sConfig.Channel = ADC_CHANNEL_3;
+  sConfig.Rank = 1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_56CYCLES;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC1_Init 2 */
+
+  /* USER CODE END ADC1_Init 2 */
+
+}
+
+/**
   * @brief I2C1 Initialization Function
   * @param None
   * @retval None
@@ -332,6 +487,104 @@ static void MX_I2C1_Init(void)
   /* USER CODE BEGIN I2C1_Init 2 */
 
   /* USER CODE END I2C1_Init 2 */
+
+}
+
+/**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_Encoder_InitTypeDef sConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 0;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 65535;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  sConfig.EncoderMode = TIM_ENCODERMODE_TI1;
+  sConfig.IC1Polarity = TIM_ICPOLARITY_RISING;
+  sConfig.IC1Selection = TIM_ICSELECTION_DIRECTTI;
+  sConfig.IC1Prescaler = TIM_ICPSC_DIV1;
+  sConfig.IC1Filter = 0;
+  sConfig.IC2Polarity = TIM_ICPOLARITY_RISING;
+  sConfig.IC2Selection = TIM_ICSELECTION_DIRECTTI;
+  sConfig.IC2Prescaler = TIM_ICPSC_DIV1;
+  sConfig.IC2Filter = 0;
+  if (HAL_TIM_Encoder_Init(&htim2, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+
+}
+
+/**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 83;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 99;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 50;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+  HAL_TIM_MspPostInit(&htim3);
 
 }
 
@@ -418,13 +671,17 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOG_CLK_ENABLE();
-  __HAL_RCC_GPIOA_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, LD1_Pin|LD3_Pin|LD2_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOE, FAN_Pin_Pin|GPIO_PIN_11, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(USB_PowerSwitchOn_GPIO_Port, USB_PowerSwitchOn_Pin, GPIO_PIN_RESET);
@@ -441,6 +698,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : FAN_Pin_Pin PE11 */
+  GPIO_InitStruct.Pin = FAN_Pin_Pin|GPIO_PIN_11;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
   /*Configure GPIO pin : USB_PowerSwitchOn_Pin */
   GPIO_InitStruct.Pin = USB_PowerSwitchOn_Pin;

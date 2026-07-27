@@ -48,6 +48,10 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/hw/touch_hw.c
     Core/Src/hw/uart_hw.c
     Core/Src/hw/imu_hw.c
+    Core/Src/hw/distance_hw.c
+    Core/Src/hw/servo_hw.c
+    Core/Src/hw/fan_hw.c
+    Core/Src/hw/encoder_hw.c
 )
 
 # Add include paths
