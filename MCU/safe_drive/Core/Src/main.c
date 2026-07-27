@@ -18,9 +18,12 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include <string.h>
-#include <stdbool.h>
-#include <stdint.h>
+  // #include "\hw\touch_hw.h"
+#include "hw/touch_hw.h"
+#include "hw/uart_hw.h"
+#include "stdio.h"
+#include "hw/imu_hw.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -33,8 +36,6 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define IS_MASTER  0
-
 
 /* USER CODE END PD */
 
@@ -44,9 +45,7 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-SPI_HandleTypeDef hspi1;
-
-TIM_HandleTypeDef htim4;
+I2C_HandleTypeDef hi2c1;
 
 UART_HandleTypeDef huart3;
 
@@ -56,11 +55,6 @@ PCD_HandleTypeDef hpcd_USB_OTG_FS;
 uint8_t last_btn_state = GPIO_PIN_RESET;
 uint32_t last_debounce = 0;
 uint8_t rx_data = 0; 
-
-
-uint8_t tx_buff[30]= "TEST SPI KOMUNIKACIJE";
-uint8_t rx_buff[30] = {0};
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -68,18 +62,17 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART3_UART_Init(void);
 static void MX_USB_OTG_FS_PCD_Init(void);
-static void MX_TIM4_Init(void);
-static void MX_SPI1_Init(void);
+static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-/*int __io_putchar(int ch) { 
+int __io_putchar(int ch) { 
     HAL_UART_Transmit(&huart3, (uint8_t*)&ch, 1, 100); 
     return ch; 
-}*/
+}
 
 /* USER CODE END 0 */
 
@@ -114,19 +107,48 @@ int main(void)
   MX_GPIO_Init();
   MX_USART3_UART_Init();
   MX_USB_OTG_FS_PCD_Init();
-  MX_TIM4_Init();
-  MX_SPI1_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-  /*touch_hw_init();
+  // touch_hw_init();
+  // uart_hw_init(&huart3);
+
   uart_hw_init(&huart3);
+  printf("Pocinje I2C sken... \r\n");
+  uint8_t found = 0;
+  for (uint8_t address = 0x08; address < 0x78; address++)
+  {
+      HAL_StatusTypeDef result = HAL_I2C_IsDeviceReady(&hi2c1, (address << 1), 3, 5);
+      if (result == HAL_OK)
+      {
+          printf("Uspjesno pronadjen uredjaj na adresi: 0x%02X\r\n", address);
+          found++;
+      }
+      else if (result == HAL_ERROR)
+      {
+          printf("Greska pri komunikaciji sa uredjajem na adresi: 0x%02X\r\n", address);
+      }
+  }
 
-  HAL_TIM_Base_Start_IT(&htim4);*/
+  if (imu_hw_init())
+  {
+   if(imu_hw_alive())
+   {
+    float temp = 0.0f;
+    if(imu_hw_read_temp(&temp))
+    {
+        printf("Temperatura: %.2f °C\r\n", temp);
+    }
+    else
+    {
+        printf("Neuspjesno citanje temperature.\r\n");
+    }
 
+   }
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-
   /*uint32_t prevtick1 = 0;
   uint32_t period1 = 300;
   uint8_t led1 = 0;
@@ -135,46 +157,6 @@ int main(void)
   uint8_t led2 = 0;*/
   while (1)
   {
-    #if IS_MASTER
-
-    if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_SET)
-    {
-        if(HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_SET)
-        {
-        
-          HAL_SPI_Transmit_IT(&hspi1, tx_buff, sizeof(tx_buff) - 1 );
-
-          while(HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_SET);
-        }
-    }
-
-    #else
-
-   
-    
-    HAL_GPIO_WritePin(LD1_GPIO_Port, LD1_Pin, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
-    HAL_StatusTypeDef status = HAL_SPI_Receive(&hspi1, rx_buff, 30, 1000 );
-
-// HAL_SPI_Receive_IT
-    if (status == HAL_TIMEOUT)
-    {
-        HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_SET);
-        HAL_Delay(2000); 
-    }
-    else if (status == HAL_OK)
-    {
-        HAL_GPIO_WritePin(LD1_GPIO_Port, LD1_Pin, GPIO_PIN_SET);
-
-        if (strcmp(rx_buff, tx_buff) == 0)
-        {
-            HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
-        }
-
-        HAL_Delay(2000); 
-    }
-#endif
     /*if (HAL_UART_Receive(&huart3, &rx_data, 1, 0) == HAL_OK)
     {
       switch (rx_data)
@@ -252,20 +234,20 @@ int main(void)
     else
     {
         HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
-    }
+    }*/
 
-    touch_hw_update();
+    // touch_hw_update();
 
-    if (touch_is_pressed() && touch_get_press_dur_mil() > 1000)
+    // if (touch_is_pressed() && touch_get_press_dur_mil() > 1000)
     
-        HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_SET);
+    //     HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_SET);
     
-    else
-    {
-         HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
-    }
+    // else
+    // {
+    //      HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
+    // }
 
-    uart_hw_update();*/
+    // uart_hw_update();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -320,84 +302,36 @@ void SystemClock_Config(void)
 }
 
 /**
-  * @brief SPI1 Initialization Function
+  * @brief I2C1 Initialization Function
   * @param None
   * @retval None
   */
-static void MX_SPI1_Init(void)
+static void MX_I2C1_Init(void)
 {
 
-  /* USER CODE BEGIN SPI1_Init 0 */
+  /* USER CODE BEGIN I2C1_Init 0 */
 
-  /* USER CODE END SPI1_Init 0 */
+  /* USER CODE END I2C1_Init 0 */
 
-  /* USER CODE BEGIN SPI1_Init 1 */
+  /* USER CODE BEGIN I2C1_Init 1 */
 
-  /* USER CODE END SPI1_Init 1 */
-  /* SPI1 parameter configuration*/
-  hspi1.Instance = SPI1;
-  hspi1.Init.Mode = SPI_MODE_SLAVE;
-  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
-  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
-  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
-  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
-  hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
-  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
-  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-  hspi1.Init.CRCPolynomial = 10;
-  if (HAL_SPI_Init(&hspi1) != HAL_OK)
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.ClockSpeed = 100000;
+  hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN SPI1_Init 2 */
+  /* USER CODE BEGIN I2C1_Init 2 */
 
-  /* USER CODE END SPI1_Init 2 */
-
-}
-
-/**
-  * @brief TIM4 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM4_Init(void)
-{
-
-  /* USER CODE BEGIN TIM4_Init 0 */
-
-  /* USER CODE END TIM4_Init 0 */
-
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-
-  /* USER CODE BEGIN TIM4_Init 1 */
-
-  /* USER CODE END TIM4_Init 1 */
-  htim4.Instance = TIM4;
-  htim4.Init.Prescaler = 8399;
-  htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 9999;
-  htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim4, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM4_Init 2 */
-
-  /* USER CODE END TIM4_Init 2 */
+  /* USER CODE END I2C1_Init 2 */
 
 }
 
@@ -484,10 +418,10 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
-  __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOG_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, LD1_Pin|LD3_Pin|LD2_Pin, GPIO_PIN_RESET);
@@ -531,20 +465,10 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-/*void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-    touch_hw_on_exti(GPIO_Pin);
+  //touch_hw_on_exti(GPIO_Pin);
 }
-*/
-
-
-/*void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-  if (htim ->Instance == TIM4)
-  {
-    HAL_GPIO_TogglePin(GPIOB, LD1_Pin);
-  }
-}*/
 /* USER CODE END 4 */
 
 /**
